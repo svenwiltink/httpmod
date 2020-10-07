@@ -26,7 +26,7 @@ func Apply() {
 	guard = monkey.Patch(stdlibHeaderWriteSubset, patchedHeaderWriteSubset)
 	patchGuards = append(patchGuards, guard)
 
-	guard = monkey.Patch(stdlibAddTls, patchedAddTls)
+	guard = monkey.Patch(stdlibEncodeHeaders, patchedEncodeHeaders)
 	patchGuards = append(patchGuards, guard)
 }
 

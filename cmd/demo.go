@@ -1,53 +1,50 @@
 package main
 
 import (
-	gotls "crypto/tls"
 	"fmt"
-	"github.com/refraction-networking/utls"
-	"golang.org/x/net/http2"
+	tls "gitlab.com/yawning/utls.git"
 	"httpmod"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 )
 
 func main() {
 	httpmod.Apply()
 
-	demoPlain()
-	demoProxyied()
-
-	httpmod.UTLSClientHelloID = tls.HelloFirefox_65
-
-	demoProxyied()
+	demoPlain("https://postman-echo.com/get")
+	demoPlain("http://postman-echo.com/get")
+	demoProxyied("https://www.genx.co.nz/")
+	demoProxyied("https://httpbin.org/anything")
+	demoProxyied("https://ja3er.com/json")
+	demoProxyied("https://client.tlsfingerprint.io:8443/")
 }
 
-func demoProxyied() {
+func demoProxyied(target string) {
 	proxyUrl, err := url.Parse("http://107.161.50.58:7603/")
 	if err != nil {
 		panic(err)
 	}
 
+	tripper, err := httpmod.NewUTLSRoundTripper(&tls.HelloFirefox_Auto, nil, proxyUrl)
 	httpClient := &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyURL(proxyUrl),
-		},
+		Transport: tripper,
 	}
 
-	req, err := http.NewRequest(http.MethodGet, "https://client.tlsfingerprint.io:8443/", nil)
+	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	oh := new(httpmod.OrderedHeader)
+	oh := make(httpmod.OrderedHeader)
 	oh.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	oh.Add("Accept-Encoding", "gzip, deflate")
 	oh.Add("Accept-Language", "en-GB,en;q=0.5")
 	oh.Add("Upgrade-Insecure-Requests", "1")
 	oh.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36")
-	oh.Apply(req.Header)
+
+	req.Header = http.Header(oh)
+
 
 	r, err := httpClient.Do(req)
 	if err != nil {
@@ -62,27 +59,31 @@ func demoProxyied() {
 	fmt.Println(string(rb))
 }
 
-func demoPlain() {
+func demoPlain(target string) {
 
-	http2Client := http.Client{
-		Transport: &http2.Transport{
-			DialTLS: dialUTLS,
-		},
+	tripper, err := httpmod.NewUTLSRoundTripper(&tls.HelloFirefox_Auto, nil, nil)
+	httpClient := &http.Client{
+		Transport: tripper,
 	}
-	req, err := http.NewRequest(http.MethodGet, "https://google.com/", nil)
+	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	oh := new(httpmod.OrderedHeader)
+	oh := make(httpmod.OrderedHeader)
 	oh.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	oh.Add("Accept-Encoding", "gzip, deflate")
 	oh.Add("Accept-Language", "en-GB,en;q=0.5")
+	oh.Add("SUP", "HEY")
 	oh.Add("Upgrade-Insecure-Requests", "1")
 	oh.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/82.0.4183.121 Safari/537.36")
-	oh.Apply(req.Header)
 
-	r, err  := http2Client.Do(req)
+	req.Header = http.Header(oh)
+
+	r, err  := httpClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
 
 	rb, err := httputil.DumpResponse(r, true)
 	if err != nil {
@@ -90,19 +91,4 @@ func demoPlain() {
 	}
 
 	fmt.Println(string(rb))
-}
-
-func dialUTLS(network, addr string, cfg *gotls.Config) (net.Conn, error) {
-	roll, err := tls.NewRoller()
-	if err != nil {
-		return nil, err
-	}
-
-	roll.HelloIDs = []tls.ClientHelloID{
-		tls.HelloChrome_Auto,
-		tls.HelloFirefox_Auto,
-	}
-
-	sni := strings.Split(addr, ":")[0]
-	return roll.Dial(network, addr, sni)
 }
