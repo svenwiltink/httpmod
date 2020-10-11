@@ -282,6 +282,7 @@ type ClientConn struct {
 	br              *bufio.Reader
 	fr              *http2.Framer
 	lastActive      time.Time
+	lastIdle        time.Time // time last idle
 	// Settings from peer: (also guarded by mu)
 	maxFrameSize          uint32
 	maxConcurrentStreams  uint32
@@ -332,6 +333,25 @@ type clientStream struct {
 	resTrailer *http.Header // client's Response.Trailer
 }
 
+// flow is the flow control window's size.
+type flow struct {
+	_ incomparable
+
+	// n is the number of DATA bytes we're allowed to send.
+	// A flow is kept both on a conn and a per-stream.
+	n int32
+
+	// conn points to the shared connection-level flow that is
+	// shared by all streams on that conn. It is nil for the flow
+	// that's on the conn directly.
+	conn *flow
+}
+
+// incomparable is a zero-width, non-comparable type. Adding it to a struct
+// makes that struct also non-comparable, and generally doesn't add
+// any size (as long as it's first).
+type incomparable [0]func()
+
 // pipe is a goroutine-safe io.Reader/io.Writer pair. It's like
 // io.Pipe except there are no PipeReader/PipeWriter halves, and the
 // underlying buffer is an interface. (io.Pipe is always unbuffered)
@@ -353,20 +373,9 @@ type pipeBuffer interface {
 }
 
 type resAndError struct {
+	_   incomparable
 	res *http.Response
 	err error
-}
-
-// flow is the flow control window's size.
-type flow struct {
-	// n is the number of DATA bytes we're allowed to send.
-	// A flow is kept both on a conn and a per-stream.
-	n int32
-
-	// conn points to the shared connection-level flow that is
-	// shared by all streams on that conn. It is nil for the flow
-	// that's on the conn directly.
-	conn *flow
 }
 
 // shouldSendReqContentLength reports whether the http2.Transport should send
