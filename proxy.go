@@ -52,6 +52,9 @@ func (pr *httpProxy) Dial(network, addr string) (net.Conn, error) {
 	br := bufio.NewReader(conn)
 	resp, err := http.ReadResponse(br, connectReq)
 	if br.Buffered() != 0 {
+		b := make([]byte, br.Buffered())
+		fmt.Println(br.Read(b))
+		fmt.Println(string(b))
 		panic(br.Buffered())
 	}
 	if err != nil {

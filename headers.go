@@ -231,6 +231,15 @@ func patchedHeaderWriteSubset(h http.Header, w io.Writer, exclude map[string]boo
 
 	customOrder, exists := h["Custom-Header-Order"]
 	if !exists {
+		for key, values := range h {
+			for _, value := range values {
+				for _, s := range []string{key, ": ", value, "\r\n"} {
+					if _, err := ws.WriteString(s); err != nil {
+						return err
+					}
+				}
+			}
+		}
 		return nil
 	}
 
@@ -245,12 +254,6 @@ func patchedHeaderWriteSubset(h http.Header, w io.Writer, exclude map[string]boo
 	}
 	return nil
 }
-
-// anything below this point was yoined from http2
-
-
-// ClientConn is the state of a single HTTP/2 client connection to an
-// HTTP/2 server.
 type ClientConn struct {
 	t         *http2.Transport
 	tconn     net.Conn             // usually *tls.Conn, except specialized impls
