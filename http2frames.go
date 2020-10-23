@@ -20,11 +20,15 @@ var (
 
 	InitialWindowSize uint32 = 65535
 
+	MaxConcurrentStreams uint32 = 1000
+
 	InitialHeaderTableSize uint32 = 4096
 
 	MaxHeaderListSize uint32 = 10 << 20
 
 	SettingEnablePush uint32 = 0
+
+	MaxFrameSize uint32 = 0
 
 	clientPreface = []byte(http2.ClientPreface)
 )
@@ -40,7 +44,7 @@ func patchedNewClientConn(t *http2.Transport, c net.Conn, singleUse bool) (*Clie
 		nextStreamID:          1,
 		maxFrameSize:          16 << 10,           // spec default
 		initialWindowSize:     65535,              // spec default
-		maxConcurrentStreams:  1000,               // "infinite", per spec. 1000 seems good enough.
+		maxConcurrentStreams:  MaxConcurrentStreams,                // "infinite", per spec. 1000 seems good enough.
 		peerMaxHeaderListSize: 0xffffffffffffffff, // "infinite", per spec. Use 2^64-1 instead.
 		streams:               make(map[uint32]*clientStream),
 		singleUse:             singleUse,
@@ -80,6 +84,9 @@ func patchedNewClientConn(t *http2.Transport, c net.Conn, singleUse bool) (*Clie
 	initialSettings := []http2.Setting{
 		{ID: http2.SettingEnablePush, Val: SettingEnablePush},
 		{ID: http2.SettingInitialWindowSize, Val: TransportDefaultStreamFlow},
+		{ID: http2.SettingMaxConcurrentStreams, Val: MaxConcurrentStreams},
+		{ID: http2.SettingHeaderTableSize, Val: InitialHeaderTableSize},
+		{ID: http2.SettingMaxFrameSize, Val: MaxFrameSize},
 	}
 
 	initialSettings = append(initialSettings, http2.Setting{ID: http2.SettingMaxHeaderListSize, Val: MaxHeaderListSize})
