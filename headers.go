@@ -203,6 +203,10 @@ func patchedEncodeHeaders(cc *ClientConn, req *http.Request, addGzipHeader bool,
 	headerOrder, ok := req.Header["Custom-Header-Order"]
 	if !ok {
 		enumerateHeaders(func(name, value string) {
+			// already sent these headers
+			if name[0] == ':' {
+				return
+			}
 			lowKey := strings.ToLower(name)
 			writeHeader(cc, lowKey, value)
 		})
@@ -254,6 +258,10 @@ func patchedHeaderWriteSubset(h http.Header, w io.Writer, exclude map[string]boo
 	}
 	return nil
 }
+
+
+// ClientConn is the state of a single HTTP/2 client connection to an
+// HTTP/2 server.
 type ClientConn struct {
 	t         *http2.Transport
 	tconn     net.Conn             // usually *tls.Conn, except specialized impls
@@ -285,7 +293,6 @@ type ClientConn struct {
 	br              *bufio.Reader
 	fr              *http2.Framer
 	lastActive      time.Time
-	lastIdle        time.Time // time last idle
 	// Settings from peer: (also guarded by mu)
 	maxFrameSize          uint32
 	maxConcurrentStreams  uint32
@@ -300,6 +307,37 @@ type ClientConn struct {
 	werr error      // first write error that has occurred
 }
 
+// flow is the flow control window's size.
+type flow struct {
+	// n is the number of DATA bytes we're allowed to send.
+	// A flow is kept both on a conn and a per-stream.
+	n int32
+
+	// conn points to the shared connection-level flow that is
+	// shared by all streams on that conn. It is nil for the flow
+	// that's on the conn directly.
+	conn *flow
+}
+
+// pipe is a goroutine-safe io.Reader/io.Writer pair. It's like
+// io.Pipe except there are no PipeReader/PipeWriter halves, and the
+// underlying buffer is an interface. (io.Pipe is always unbuffered)
+type pipe struct {
+	mu       sync.Mutex
+	c        sync.Cond     // c.L lazily initialized to &p.mu
+	b        pipeBuffer    // nil when done reading
+	unread   int           // bytes unread when done
+	err      error         // read error once empty. non-nil means closed.
+	breakErr error         // immediate read error (caller doesn't see rest of b)
+	donec    chan struct{} // closed on error
+	readFn   func()        // optional code to run in Read before error
+}
+
+type pipeBuffer interface {
+	Len() int
+	io.Writer
+	io.Reader
+}
 
 // clientStream is the state for a single HTTP/2 stream. One of these
 // is created for each Transport.RoundTrip call.
@@ -336,47 +374,7 @@ type clientStream struct {
 	resTrailer *http.Header // client's Response.Trailer
 }
 
-// flow is the flow control window's size.
-type flow struct {
-	_ incomparable
-
-	// n is the number of DATA bytes we're allowed to send.
-	// A flow is kept both on a conn and a per-stream.
-	n int32
-
-	// conn points to the shared connection-level flow that is
-	// shared by all streams on that conn. It is nil for the flow
-	// that's on the conn directly.
-	conn *flow
-}
-
-// incomparable is a zero-width, non-comparable type. Adding it to a struct
-// makes that struct also non-comparable, and generally doesn't add
-// any size (as long as it's first).
-type incomparable [0]func()
-
-// pipe is a goroutine-safe io.Reader/io.Writer pair. It's like
-// io.Pipe except there are no PipeReader/PipeWriter halves, and the
-// underlying buffer is an interface. (io.Pipe is always unbuffered)
-type pipe struct {
-	mu       sync.Mutex
-	c        sync.Cond     // c.L lazily initialized to &p.mu
-	b        pipeBuffer    // nil when done reading
-	unread   int           // bytes unread when done
-	err      error         // read error once empty. non-nil means closed.
-	breakErr error         // immediate read error (caller doesn't see rest of b)
-	donec    chan struct{} // closed on error
-	readFn   func()        // optional code to run in Read before error
-}
-
-type pipeBuffer interface {
-	Len() int
-	io.Writer
-	io.Reader
-}
-
 type resAndError struct {
-	_   incomparable
 	res *http.Response
 	err error
 }

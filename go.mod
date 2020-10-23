@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	bou.ke/monkey v1.0.2
+	github.com/joneskoo/http2-keylog v0.0.0-20161116234904-b6e4051a241b // indirect
 	gitlab.com/yawning/utls.git v0.0.11-1
 	golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0 // indirect
 	golang.org/x/net v0.0.0-20191027093000-83d349e8ac1a

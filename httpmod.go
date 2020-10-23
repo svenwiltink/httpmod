@@ -28,6 +28,9 @@ func Apply() {
 
 	guard = monkey.Patch(stdlibEncodeHeaders, patchedEncodeHeaders)
 	patchGuards = append(patchGuards, guard)
+
+	guard = monkey.Patch(stdlibNewClientConn, patchedNewClientConn)
+	patchGuards = append(patchGuards, guard)
 }
 
 func Remove() {
